@@ -42,16 +42,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive on Windows
         if: matrix.os == 'windows-latest'
         run: |
-          $Volume = New-VHD -Path C:/tunit_dev_drive.vhdx -SizeBytes 20GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+          # Try D: drive first (fast local SSD on GitHub runners), fall back to ReFS VHD
+          if (Test-Path "D:\") {
+            Write-Output "Using existing D: drive"
+            $DevDrive = "D:"
+          } else {
+            Write-Output "D: not available, creating ReFS VHD"
+            $Volume = New-VHD -Path C:/tunit_dev_drive.vhdx -SizeBytes 20GB |
+                      Mount-VHD -Passthru |
+                      Initialize-Disk -Passthru |
+                      New-Partition -AssignDriveLetter -UseMaximumSize |
+                      Format-Volume -FileSystem ReFS -Confirm:$false -Force
+            Write-Output $Volume
+            $DevDrive = "$($Volume.DriveLetter):"
+          }
+          Write-Output "DEV_DRIVE=$DevDrive" >> $env:GITHUB_ENV
         shell: pwsh
 
       - name: Copy Repo to Dev Drive
