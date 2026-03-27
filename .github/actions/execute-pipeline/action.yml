@@ -24,6 +24,10 @@ inputs:
     description: 'Net version'
     required: false
     default: 'net10.0'
+  base-dir:
+    description: 'Base directory for the project'
+    required: false
+    default: '.'
 
 runs:
   using: "composite"
@@ -31,7 +35,7 @@ runs:
     - name: Run Pipeline
       shell: bash
       run: dotnet run -c Release --categories ${{ inputs.categories }}
-      working-directory: "TUnit.Pipeline"
+      working-directory: "${{ inputs.base-dir }}/TUnit.Pipeline"
       env:
         ADMIN_TOKEN: ${{ inputs.admin-token }}
         GITHUB_TOKEN: ${{ github.token }}

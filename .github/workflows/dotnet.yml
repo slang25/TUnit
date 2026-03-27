@@ -22,6 +22,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    env:
+      WORK_DIR: ${{ github.workspace }}
 
     steps:
       - name: Free Disk Space (Ubuntu)
@@ -39,6 +41,25 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Create Dev Drive using ReFS
+        if: matrix.os == 'windows-latest'
+        run: |
+          $Volume = New-VHD -Path C:/tunit_dev_drive.vhdx -SizeBytes 20GB |
+                    Mount-VHD -Passthru |
+                    Initialize-Disk -Passthru |
+                    New-Partition -AssignDriveLetter -UseMaximumSize |
+                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
+          Write-Output $Volume
+          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Copy Repo to Dev Drive
+        if: matrix.os == 'windows-latest'
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/TUnit" -Recurse
+          Write-Output "WORK_DIR=${{ env.DEV_DRIVE }}/TUnit" >> $env:GITHUB_ENV
+        shell: pwsh
 
       - name: Check for .received.txt files
         shell: bash
@@ -126,6 +147,7 @@ jobs:
         uses: gittools/actions/gitversion/execute@v3
 
       - name: Build
+        working-directory: ${{ env.WORK_DIR }}
         shell: bash
         run: >-
           dotnet build TUnit.CI.slnx -c Release
@@ -139,6 +161,7 @@ jobs:
           "-p:RepositoryCommit=${{ steps.gitversion.outputs.sha }}"
 
       - name: Publish AOT
+        working-directory: ${{ env.WORK_DIR }}
         shell: bash
         run: >-
           dotnet publish TUnit.TestProject/TUnit.TestProject.csproj -c Release
@@ -162,6 +185,7 @@ jobs:
       - name: Run Pipeline
         uses: ./.github/actions/execute-pipeline
         with:
+          base-dir: ${{ env.WORK_DIR }}
           admin-token: ${{ secrets.ADMIN_TOKEN }}
           environment: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Development' }}
           nuget-apikey: ${{ secrets.NUGET__APIKEY }}
@@ -172,18 +196,18 @@ jobs:
         if: always()
         with:
           name: TestingPlatformDiagnosticLogs${{matrix.os}}
-          path: '**/log_*.diag'
+          path: '${{ env.WORK_DIR }}/**/log_*.diag'
 
       - name: Upload Hang Dumps
         uses: actions/upload-artifact@v7.0.0
         if: always()
         with:
           name: HangDump${{matrix.os}}
-          path: '**/hangdump*'
+          path: '${{ env.WORK_DIR }}/**/hangdump*'
 
       - name: NuGet Packages Artifacts
         uses: actions/upload-artifact@v7.0.0
         if: always()
         with:
           name: 'NuGetPackages-${{matrix.os}}'
-          path: '**/*.*nupkg'
+          path: '${{ env.WORK_DIR }}/**/*.*nupkg'
