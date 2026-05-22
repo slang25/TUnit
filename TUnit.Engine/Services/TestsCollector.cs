@@ -6,7 +6,11 @@ internal class TestsCollector(string sessionId)
 {
     public IEnumerable<TestMetadata> GetTests()
     {
-        while (Sources.TestSources.TryDequeue(out var testSource))
+        // Iterate non-destructively. Source-generated registrations are populated once at
+        // module init and must stay observable across multiple test sessions (MTP server
+        // mode sends many `testing/runTests` to one process). Draining the queue made the
+        // second session see no tests.
+        foreach (var testSource in Sources.TestSources)
         {
             foreach (var testMetadata in testSource.CollectTests(sessionId))
             {
@@ -14,10 +18,10 @@ internal class TestsCollector(string sessionId)
             }
         }
     }
-    
+
     public IEnumerable<DynamicTest> GetDynamicTests()
     {
-        while (Sources.DynamicTestSources.TryDequeue(out var dynamicTestSource))
+        foreach (var dynamicTestSource in Sources.DynamicTestSources)
         {
             foreach (var dynamicTest in dynamicTestSource.CollectDynamicTests(sessionId))
             {

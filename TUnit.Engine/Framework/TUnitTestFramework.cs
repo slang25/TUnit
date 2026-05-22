@@ -47,11 +47,15 @@ internal sealed class TUnitTestFramework : ITestFramework, IDataProducer
     
     public Task<CreateTestSessionResult> CreateTestSessionAsync(CreateTestSessionContext context)
     {
-        while(Sources.AssemblyLoaders.TryDequeue(out var assemblyLoader))
+        // Iterate non-destructively. Sources.AssemblyLoaders is populated at module init
+        // and must remain observable across multiple test sessions (MTP server mode sends
+        // many `testing/runTests` requests to one process). Draining via TryDequeue made
+        // the second session see an empty queue → zero tests discovered.
+        foreach (var assemblyLoader in Sources.AssemblyLoaders)
         {
             TryLoadAssembly(assemblyLoader);
         }
-        
+
         return Task.FromResult(new CreateTestSessionResult
         {
             IsSuccess = true
